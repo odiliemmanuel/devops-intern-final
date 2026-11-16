@@ -28,3 +28,25 @@ jobs:
           docker run --rm -i \
             hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d \
             < app/Dockerfile
+
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg BUILD_SHA=${{ github.sha }} \
+            -t "$IMAGE_NAME:ci" app
+          docker images "$IMAGE_NAME:ci"
+
+      - name: Save image for later jobs
+        run: docker save "$IMAGE_NAME:ci" -o image.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: image.tar
+          retention-days: 1
