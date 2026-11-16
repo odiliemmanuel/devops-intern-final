@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
 
-# Least privilege by default; the publish job raises it for itself only.
+
 permissions:
   contents: read
 
@@ -22,7 +22,7 @@ jobs:
       - name: ShellCheck
         run: shellcheck scripts/*.sh
 
-      # Pinned by digest to the exact hadolint 2.15.1 image used locally
+      
       - name: Hadolint
         run: |
           docker run --rm -i \
@@ -50,3 +50,36 @@ jobs:
           name: image
           path: image.tar
           retention-days: 1
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+
+      - name: Load and start container
+        run: |
+          docker load -i image.tar
+          docker run -d --name web -p 8080:8080 "$IMAGE_NAME:ci"
+
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8080/healthz >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          echo "container never became ready" >&2
+          exit 1
+
+      - name: Health check (fails the job if not 200)
+        run: |
+          ./scripts/healthcheck.sh http://localhost:8080/
+          ./scripts/healthcheck.sh http://localhost:8080/healthz
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs web
