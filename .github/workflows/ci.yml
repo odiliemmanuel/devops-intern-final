@@ -83,3 +83,31 @@ jobs:
       - name: Show container logs on failure
         if: failure()
         run: docker logs web
+
+  publish:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+
+      - name: Log in to GHCR with the built-in token
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push (commit SHA and latest)
+        run: |
+          docker load -i image.tar
+          REPO="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker tag "$IMAGE_NAME:ci" "$REPO:${{ github.sha }}"
+          docker tag "$IMAGE_NAME:ci" "$REPO:latest"
+          docker push "$REPO:${{ github.sha }}"
+          docker push "$REPO:latest"
